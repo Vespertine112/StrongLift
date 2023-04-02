@@ -7,6 +7,9 @@ import pandas as pd
 import sys
 import numpy as np
 import csv
+from tabulate import tabulate
+import datetime
+import argparse
 
 EXERCISE_NAME_COL = "Exercise Name"
 LINE_STYLE = '' # 'o-', '.-'
@@ -22,32 +25,51 @@ def main():
     liftData = pd.DataFrame(cleanedRows[1:], columns=cleanedRows[0])
     liftTypes = GetAllLiftTypes(liftData)
 
-    # If the user wants to see the big lifts, run those reports and exit
-    if len(sys.argv) > 1:
-        try:
-            for lift in BIG_LIFTS:
-                print(f"attempting to plot {lift}")
-                cleanedData = FilterAndCleanFrame(liftData, lift)
-                PlotMaxWeight(cleanedData, lift)
-        except:
-            print("Error plotting data")
-        finally:
-            plt.show()
-            return
-
     # Show the menu to choose a lift
     selectedLift = ShowLiftSelectionMenu(liftTypes)
     # selectedLift = "Bench Press (Barbell)"
 
     # Clean the DataFrame and get the data for the selected lift
-    liftData = FilterAndCleanFrame(liftData, selectedLift)
+    selectedLiftData, liftData = FilterAndCleanFrame(liftData, selectedLift)
 
-    PlotMeanTotalWeightLifted(liftData, selectedLift)
-    PlotAmrap(liftData, selectedLift)
-    PlotMaxWeight(liftData, selectedLift)
+    if len(sys.argv) > 0: ParseArgs(selectedLiftData, liftData)
 
-    plt.show()
-    plt.legend()
+    # PlotMeanTotalWeightLifted(selectedLiftData, selectedLift)
+    # PlotAmrap(selectedLiftData, selectedLift)
+    # PlotMaxWeight(selectedLiftData, selectedLift)
+
+    # plt.show()
+    # plt.legend()
+
+def GetAggregateStats(df, selectedLift):
+    # Get total weight lifted
+    totalWeightLifted: np.float64 = df['Total Weight'].sum()
+    totalWeightLifted = "{:,.2f}".format(totalWeightLifted.astype(float))
+
+    # Get total reps
+    totalReps: np.float64 = df['Reps'].sum()
+
+    # Total Time spent in Gym 
+    totalTime = df.groupby('Date')['Workout Duration'].mean().sum()
+
+    # Get total workouts
+    totalWorkouts = df['Date'].nunique()
+
+    # Average workout time
+    avgWorkoutTime = totalTime / totalWorkouts
+
+    # Average Time of day to attend gym
+    avgTimeOfDay = pd.Timedelta(df["Date"].mean().strftime("%H:%M:%S"))
+    avgTimeOfDay = datetime.datetime.fromtimestamp(avgTimeOfDay.total_seconds()).strftime("%I:%M %p")
+
+    table = [["Total Weight Lifted:", totalWeightLifted, "lbs"],
+         ["Total Reps:", totalReps, "x"],
+         ["Total Time Spent in Gym:", str(totalTime), "minutes"],
+         ["Total Workouts:", totalWorkouts, "x"],
+         ["Average Workout Time:", str(avgWorkoutTime), "minutes"],
+         ["Average Time of Day:", str(avgTimeOfDay), "Time"]]
+    
+    print(f"LifeTime Stats:\n{tabulate(table, tablefmt='fancy_grid', headers=['Stat', 'Value', 'Units'])}")
 
 # Plot the max weight lifted by day
 def PlotMaxWeight(df: pd.DataFrame, selectedLift):
@@ -95,17 +117,20 @@ def PlotMeanTotalWeightLifted(df, selectedLift):
     plt.title(f'Mean Total Weight Lifted by Day: {selectedLift}')
 
 # Modify DataFrame for plotting
-def FilterAndCleanFrame(df, selectedLift):
+def FilterAndCleanFrame(df: pd.DataFrame, selectedLift):
     # Modify Types
-    df = df[df[EXERCISE_NAME_COL] == selectedLift]
-    df['Weight'] = df['Weight'].astype(float)
-    df['Reps'] = df['Reps'].astype(float)
+    df['Weight'] = df['Weight'].replace('', 0).astype(float)
+    df['Reps'] = df['Reps'].replace('', 0).astype(float)
     df['Date'] = pd.to_datetime(df['Date'])
+    df['Workout Duration'] = pd.to_timedelta(df['Workout Duration'])
 
-    # create new column for total weight lifted
-    df['Total Weight'] = df['Weight'] * df['Reps']
 
-    return df
+    # create new column for total weight alifted
+    df['Total Weight'] = df['Weight']  * df['Reps']
+
+
+    selectedLiftData = df[df[EXERCISE_NAME_COL] == selectedLift]
+    return selectedLiftData, df
 
 # Show a menu to select a lift
 def ShowLiftSelectionMenu(liftTypes):
@@ -152,6 +177,56 @@ def GetAllLiftTypes(dataFrame):
     liftTypes = dataFrame[EXERCISE_NAME_COL].unique()
     liftTypes = sorted(liftTypes)
     return liftTypes
+
+# Gets notes for selected lift
+def GetNotes(liftData, selectedLiftData):
+    # Get all notes
+    notes = selectedLiftData['Notes'].unique()
+    notes = [note for note in notes if note != '']
+    notes = sorted(notes)
+    return notes
+
+
+def ParseArgs(selectedLiftData, liftData):
+    parser = argparse.ArgumentParser()
+
+    subparsers = parser.add_subparsers(dest='command')
+
+    # big3 subcommand
+    big3_parser = subparsers.add_parser('big3', help='Plots all data for the big 3 lifts')
+
+    # all subcommand
+    all_parser = subparsers.add_parser('all', help='Get lifetime aggregate stats')
+
+    # Notes subcommand
+    notes_parser = subparsers.add_parser('notes', help='Get notes for all lifts')
+
+    args = parser.parse_args()
+
+    # If the user wants to see the big lifts, run those reports and exit
+    if args.command == 'big3':
+        try:
+            for lift in BIG_LIFTS:
+                print(f"attempting to plot {lift}")
+                cleanedData, liftData = FilterAndCleanFrame(liftData, lift)
+                PlotMaxWeight(cleanedData, lift)
+        except Exception as e:
+            print(f"Error plotting {lift}: {e}")
+        finally:
+            plt.show()
+            return
+        
+    elif args.command == 'all':
+        # handle all command here
+        GetAggregateStats(liftData, selectedLiftData)
+
+    elif args.command == 'notes':
+        # handle notes command here
+        notes = GetNotes(liftData, selectedLiftData)
+        with open ('notes.txt', 'w', encoding='utf-8') as f:
+            for note in notes:
+                f.write(f"{note}\n",)
+        print(f"Notes written to notes.txt")
 
 if __name__ == "__main__":
     main()
