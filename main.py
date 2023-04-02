@@ -4,11 +4,14 @@ import matplotlib.pyplot as plt
 import PySimpleGUI as sg
 import ctypes
 import pandas as pd
+import sys
 import numpy as np
 import csv
 
 EXERCISE_NAME_COL = "Exercise Name"
 LINE_STYLE = '' # 'o-', '.-'
+
+BIG_LIFTS = ['Bench Press (Barbell)', 'Squat (Barbell)', 'Deadlift (Barbell)']
 
 def main():
     # Load the csv and clean the data
@@ -19,6 +22,19 @@ def main():
     liftData = pd.DataFrame(cleanedRows[1:], columns=cleanedRows[0])
     liftTypes = GetAllLiftTypes(liftData)
 
+    # If the user wants to see the big lifts, run those reports and exit
+    if len(sys.argv) > 1:
+        try:
+            for lift in BIG_LIFTS:
+                print(f"attempting to plot {lift}")
+                cleanedData = FilterAndCleanFrame(liftData, lift)
+                PlotMaxWeight(cleanedData, lift)
+        except:
+            print("Error plotting data")
+        finally:
+            plt.show()
+            return
+
     # Show the menu to choose a lift
     selectedLift = ShowLiftSelectionMenu(liftTypes)
     # selectedLift = "Bench Press (Barbell)"
@@ -26,14 +42,15 @@ def main():
     # Clean the DataFrame and get the data for the selected lift
     liftData = FilterAndCleanFrame(liftData, selectedLift)
 
-    PlotMeanTotalWeightLifted(liftData)
-    PlotAmrap(liftData)
-    PlotMaxWeight(liftData)
+    PlotMeanTotalWeightLifted(liftData, selectedLift)
+    PlotAmrap(liftData, selectedLift)
+    PlotMaxWeight(liftData, selectedLift)
+
     plt.show()
     plt.legend()
 
-
-def PlotMaxWeight(df: pd.DataFrame):
+# Plot the max weight lifted by day
+def PlotMaxWeight(df: pd.DataFrame, selectedLift):
     # Group the data and get idx for the max weight lifted each day, then extract the data from the og frame with all rep column as well
     maxesDf = df.groupby('Date')['Weight'].max()
     maxesDf = maxesDf.reset_index()
@@ -42,11 +59,10 @@ def PlotMaxWeight(df: pd.DataFrame):
 
     plt.xlabel('Date')
     plt.ylabel('Max Weight (lbs)')
-    plt.title('Max Weight lifted for rep(s) By Day')
-
+    plt.title(f'Max Weight lifted for rep(s) By Day: {selectedLift}')
 
 # Plot Amrap Weight Lifted by Day
-def PlotAmrap(df: pd.DataFrame):
+def PlotAmrap(df: pd.DataFrame, selectedLift):
     # Group the data and get idx for the max weight lifted each day, then extract the data from the og frame with all rep column as well
     grouped = df.groupby('Date')
     max_idxs = grouped['Weight'].idxmax()
@@ -60,11 +76,10 @@ def PlotAmrap(df: pd.DataFrame):
 
     plt.xlabel('Date')
     plt.ylabel('Estimated Amrap (lbs)')
-    plt.title('Amrap 1rm Estimation By Day')
-
+    plt.title(f'Amrap 1rm Estimation By Day {selectedLift}')
 
 # Plot Mean total Weight Lifted by Day
-def PlotMeanTotalWeightLifted(df):
+def PlotMeanTotalWeightLifted(df, selectedLift):
     # group data by date and calculate mean total weight lifted
     reps_sum = df.groupby(['Date'])['Reps'].sum()
     weight_sum = df.groupby(['Date'])['Total Weight'].sum()
@@ -77,7 +92,7 @@ def PlotMeanTotalWeightLifted(df):
 
     plt.xlabel('Date')
     plt.ylabel('Mean Total Weight Lifted (lbs)')
-    plt.title('Mean Total Weight Lifted by Day')
+    plt.title(f'Mean Total Weight Lifted by Day: {selectedLift}')
 
 # Modify DataFrame for plotting
 def FilterAndCleanFrame(df, selectedLift):
