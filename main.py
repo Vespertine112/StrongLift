@@ -4,9 +4,11 @@ import matplotlib.pyplot as plt
 import PySimpleGUI as sg
 import ctypes
 import pandas as pd
+import numpy as np
 import csv
 
 EXERCISE_NAME_COL = "Exercise Name"
+LINE_STYLE = '' # 'o-', '.-'
 
 def main():
     # Load the csv and clean the data
@@ -21,30 +23,76 @@ def main():
     selectedLift = ShowLiftSelectionMenu(liftTypes)
     # selectedLift = "Bench Press (Barbell)"
 
+    # Clean the DataFrame and get the data for the selected lift
+    liftData = FilterAndCleanFrame(liftData, selectedLift)
+
+    PlotMeanTotalWeightLifted(liftData)
+    PlotAmrap(liftData)
+    PlotMaxWeight(liftData)
+    plt.show()
+    plt.legend()
 
 
-    # Get the data for the selected lift
-    # print(selectedLift)
-    selected_rows = liftData[liftData[EXERCISE_NAME_COL] == selectedLift]
-    selected_rows['Weight'] = selected_rows['Weight'].astype(float)
-    selected_rows['Reps'] = selected_rows['Reps'].astype(float)
-    selected_rows['Date'] = pd.to_datetime(selected_rows['Date'])
-    # print(selected_rows)
-    # print(selected_rows.groupby("Date")['Weight'].mean())
+def PlotMaxWeight(df: pd.DataFrame):
+    # Group the data and get idx for the max weight lifted each day, then extract the data from the og frame with all rep column as well
+    maxesDf = df.groupby('Date')['Weight'].max()
+    maxesDf = maxesDf.reset_index()
+    # plot the data
+    maxesDf.plot(kind='line', x='Date', y='Weight', style=LINE_STYLE, grid=True)
 
-    # create new column for total weight lifted
-    selected_rows['Total Weight'] = selected_rows['Weight'] * selected_rows['Reps']
+    plt.xlabel('Date')
+    plt.ylabel('Max Weight (lbs)')
+    plt.title('Max Weight lifted for rep(s) By Day')
 
+
+# Plot Amrap Weight Lifted by Day
+def PlotAmrap(df: pd.DataFrame):
+    # Group the data and get idx for the max weight lifted each day, then extract the data from the og frame with all rep column as well
+    grouped = df.groupby('Date')
+    max_idxs = grouped['Weight'].idxmax()
+    amrapDf = df.loc[max_idxs, ['Date', 'Weight', 'Reps']]
+
+    # Calculate the amrap weight lifted using Epley formula
+    amrapDf['Amrap'] = amrapDf['Weight'] * (1 + (amrapDf['Reps'] / 30))
+
+    # plot the data
+    amrapDf.plot(kind='line', x='Date', y='Amrap', style=LINE_STYLE, grid=True)
+
+    plt.xlabel('Date')
+    plt.ylabel('Estimated Amrap (lbs)')
+    plt.title('Amrap 1rm Estimation By Day')
+
+
+# Plot Mean total Weight Lifted by Day
+def PlotMeanTotalWeightLifted(df):
     # group data by date and calculate mean total weight lifted
-    daily_mean_weight = selected_rows.groupby(['Date'])['Total Weight'].mean()
+    reps_sum = df.groupby(['Date'])['Reps'].sum()
+    weight_sum = df.groupby(['Date'])['Total Weight'].sum()
+    
+    daily_mean_weight = (weight_sum / reps_sum)
+    daily_mean_weight = daily_mean_weight.rename({0: 'Date', 1: 'Total Weight'})
 
-    # plot results
-    daily_mean_weight.plot(kind='line', x='Date', y='Total Weight')
+    # plot the data
+    daily_mean_weight.plot(kind='line', x='Date', y='Total Weight', style=LINE_STYLE, grid=True)
+
     plt.xlabel('Date')
     plt.ylabel('Mean Total Weight Lifted (lbs)')
     plt.title('Mean Total Weight Lifted by Day')
-    plt.show()
 
+# Modify DataFrame for plotting
+def FilterAndCleanFrame(df, selectedLift):
+    # Modify Types
+    df = df[df[EXERCISE_NAME_COL] == selectedLift]
+    df['Weight'] = df['Weight'].astype(float)
+    df['Reps'] = df['Reps'].astype(float)
+    df['Date'] = pd.to_datetime(df['Date'])
+
+    # create new column for total weight lifted
+    df['Total Weight'] = df['Weight'] * df['Reps']
+
+    return df
+
+# Show a menu to select a lift
 def ShowLiftSelectionMenu(liftTypes):
     # Define the layout
     layout = [[sg.Text("Select an item:")],
@@ -80,6 +128,7 @@ def CleanCSV(rawCSVName):
         rows = [[cell.replace('\n', ' ') for cell in row] for row in rows]
         return rows
 
+# Return a set of all list types (sorted alphabetically)
 def GetAllLiftTypes(dataFrame):
     # Get all lift types
     liftTypes = []
