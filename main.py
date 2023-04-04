@@ -19,7 +19,7 @@ BIG_LIFTS = ['Bench Press (Barbell)', 'Squat (Barbell)', 'Deadlift (Barbell)']
 
 def main():
     # Load the csv and clean the data
-    cleanedRows = CleanCSV('lifts2.csv')
+    cleanedRows = CleanCSV('lifts.csv')
 
 
     # Load the data into a Pandas DataFrame
@@ -33,14 +33,14 @@ def main():
     # Clean the DataFrame and get the data for the selected lift
     selectedLiftData, liftData = FilterAndCleanFrame(liftData, selectedLift)
 
-    if len(sys.argv) > 0:
+    if len(sys.argv) > 1:
         ParseArgs(selectedLiftData, liftData) 
         return
 
     # PlotMeanTotalWeightLifted(selectedLiftData, selectedLift)
-    PlotAmrap(selectedLiftData, selectedLift)
+    # PlotAmrap(selectedLiftData, selectedLift)
     # PlotMaxWeight(selectedLiftData, selectedLift)
-    # PlotWorkoutHeatmap(liftData, selectedLift)
+    PlotWorkoutHeatmap(liftData, selectedLift)
 
     # plt.show()
     # plt.legend()
