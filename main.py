@@ -1,6 +1,7 @@
 # Author: Brayden Hill
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import PySimpleGUI as sg
 import ctypes
 import pandas as pd
@@ -18,7 +19,7 @@ BIG_LIFTS = ['Bench Press (Barbell)', 'Squat (Barbell)', 'Deadlift (Barbell)']
 
 def main():
     # Load the csv and clean the data
-    cleanedRows = CleanCSV('lifts.csv')
+    cleanedRows = CleanCSV('lifts2.csv')
 
 
     # Load the data into a Pandas DataFrame
@@ -32,11 +33,14 @@ def main():
     # Clean the DataFrame and get the data for the selected lift
     selectedLiftData, liftData = FilterAndCleanFrame(liftData, selectedLift)
 
-    if len(sys.argv) > 0: ParseArgs(selectedLiftData, liftData)
+    if len(sys.argv) > 0:
+        ParseArgs(selectedLiftData, liftData) 
+        return
 
     # PlotMeanTotalWeightLifted(selectedLiftData, selectedLift)
-    # PlotAmrap(selectedLiftData, selectedLift)
+    PlotAmrap(selectedLiftData, selectedLift)
     # PlotMaxWeight(selectedLiftData, selectedLift)
+    # PlotWorkoutHeatmap(liftData, selectedLift)
 
     # plt.show()
     # plt.legend()
@@ -93,12 +97,32 @@ def PlotAmrap(df: pd.DataFrame, selectedLift):
     # Calculate the amrap weight lifted using Epley formula
     amrapDf['Amrap'] = amrapDf['Weight'] * (1 + (amrapDf['Reps'] / 30))
 
-    # plot the data
+    # Fit a line to the data using polyfit
+    x = amrapDf['Date'].values.astype(np.int64) // 10 ** 9
+    y = amrapDf['Amrap'].values
+    z = np.polyfit(x, y, 1)
+    p = np.poly1d(z)
+
+    # Extract slope
+    slope = z[0] * (24*60*60) # convert slope from seconds to days
+
+    # Plot the data and the trendline 1st Degree Polynomial
     amrapDf.plot(kind='line', x='Date', y='Amrap', style=LINE_STYLE, grid=True)
+    plt.plot(amrapDf['Date'], p(x), 'r--')
+
+    # Plot the data and the trendline 2st Degree Polynomial
+    z = np.polyfit(x, y, 2)
+    p = np.poly1d(z)
+    plt.plot(amrapDf['Date'], p(x), 'g--')
+
+    # Add the equation of the trendline to the plot
+    plt.text(amrapDf['Date'].iloc[-1], amrapDf['Amrap'].min(), f'Slope = {slope:.5f}', ha='right', va='bottom')
 
     plt.xlabel('Date')
     plt.ylabel('Estimated Amrap (lbs)')
     plt.title(f'Amrap 1rm Estimation By Day {selectedLift}')
+
+    plt.show()
 
 # Plot Mean total Weight Lifted by Day
 def PlotMeanTotalWeightLifted(df, selectedLift):
@@ -186,7 +210,37 @@ def GetNotes(liftData, selectedLiftData):
     notes = sorted(notes)
     return notes
 
+# Plot a scatter plot of the workout frequency over time (by month)
+def PlotWorkoutHeatmap(df: pd.DataFrame, selectedLift: pd.DataFrame):
+    # Group by Month and count workouts
+    monthly_counts = df.groupby(pd.Grouper(key='Date', freq='M'))['Date'].nunique()
+    monthly_df = pd.DataFrame({'Date': monthly_counts.index, 'Workout Count': monthly_counts.values})
+    print(monthly_df.head())
 
+    # Create scatter plot
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.scatter(monthly_df['Date'], monthly_df['Workout Count'], s=50, alpha=0.5)
+    ax.set_xlabel('Month')
+    ax.set_ylabel('Workouts per Month')
+    ax.set_title('Workout Frequency over Time')
+    ax.set_ylim(bottom=0)
+
+    # Add 1st Polynomial trendline for overall
+    x = monthly_df['Date']
+    y = monthly_df['Workout Count']
+    z = np.polyfit(mdates.date2num(x), y, 1)
+    p = np.poly1d(z)
+    ax.plot(x, p(mdates.date2num(x)), 'r--')
+
+    # Add 3rd Polynomial trendline for overall
+    z = np.polyfit(mdates.date2num(x), y, 3)
+    p = np.poly1d(z)
+    ax.plot(x, p(mdates.date2num(x)), 'g--')
+
+    # Show plot
+    plt.show()
+
+# Parse command line arguments
 def ParseArgs(selectedLiftData, liftData):
     parser = argparse.ArgumentParser()
 
@@ -209,7 +263,7 @@ def ParseArgs(selectedLiftData, liftData):
             for lift in BIG_LIFTS:
                 print(f"attempting to plot {lift}")
                 cleanedData, liftData = FilterAndCleanFrame(liftData, lift)
-                PlotMaxWeight(cleanedData, lift)
+                PlotAmrap(cleanedData, lift)
         except Exception as e:
             print(f"Error plotting {lift}: {e}")
         finally:
